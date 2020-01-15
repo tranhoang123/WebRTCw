@@ -12,8 +12,8 @@ const options = {
   connectTimeout: 10000, //milliseconds
   ackTimeout: 10000, //milliseconds
 }
-const remoteId = 496; // id cua user
-const localId = 269; // id cua idol
+const remoteId = 496; // id cua idol
+const localId = 269; // id cua user
 const handshakeRTC = "handshakeRTC";
 const socket = socketCluster.create(options);
 socket.on('connect', async () => { // khoi tao va dang nhap socket
@@ -52,7 +52,7 @@ const configuration = {
 };
 
 const constrains = {
-  "audio": true,
+  "audio": false,
   "video": true,
 };
 
@@ -150,7 +150,7 @@ function createPC(socketId, isOffer) {
   
   pc.onicecandidate = event => { 
     console.log('onicecandidate');
-    
+    console.log(event);
     if (event.candidate) {
       socket.emit(handshakeRTC, { to_id : remoteId, candidate: event.candidate, from_id: localId, to_name: "A", from_name: "B", type: handshakeRTC});
     }
@@ -172,19 +172,21 @@ function createPC(socketId, isOffer) {
   let negotiating = false;
   pc.onnegotiationneeded = async e => {
     try {
-      if (negotiating || pc.signalingState != "stable") return; // lỗi của trình duyệt chrome, thêm dòng này nhưng chưa biết chính xác lỗi là gì 
+      if (negotiating) {
+        console.log("======================SKIP nested negotiations");
+        return;
+      } // lỗi của trình duyệt chrome, thêm dòng này nhưng chưa biết chính xác lỗi là gì 
       negotiating = true;
         console.log('onnegotiationneeded');
         if (isOffer) {
           try {
             const description = await pc.createOffer();
             await pc.setLocalDescription(description);
-            
             socket.emit(handshakeRTC, { to_id: remoteId, from_id: localId, sdp: pc.localDescription, to_name: 'A', from_name: 'B', type: handshakeRTC});
           } catch (e) {logError(e);}    
     }
     } finally {
-      negotiating = false;
+      console.log("=================finshied negotiationeeded");
     }
   }
   pc.oniceconnectionstatechange = event => {
@@ -197,6 +199,7 @@ function createPC(socketId, isOffer) {
   pc.onsignalingstatechange = event => {
     console.log('onsignalingstatechange', event);
     console.log('signalingState', pc.signalingState);
+    negotiating = (pc.signalingState != "stable");
   };
   
   pc.ontrack = event => {
@@ -258,7 +261,7 @@ async function exchange(data) {
     console.log('remoteOffer:\n', remoteOffer);
     
     try {
-      await pc.setRemoteDescription(remoteOffer); 
+      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); 
       console.log('setRemoteDescription ok');
       
       if (pc.remoteDescription.type === "offer") {
