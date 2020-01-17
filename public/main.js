@@ -52,8 +52,8 @@ const configuration = {
 };
 
 const constrains = {
-  "audio": false,
-  "video": true,
+  audio: true,
+  video: true,
 };
 
 const p = document.querySelector("p");
@@ -78,7 +78,7 @@ async function getLocalStream() { // lấy stream trên trình duyệt local b�
   
   try {
     const stream = await navigator.mediaDevices.getUserMedia(constrains);
-    
+   
     localStream = stream;
     localVideo.srcObject = stream;
     localVideo.muted = true;
@@ -131,9 +131,12 @@ function handleEvent(data) {
     if(!message && !pong && !ping){
       exchange(data);
     }
+    else if(ping && from_id == remoteId) {
+      socket.emit(handshakeRTC, {to_id: remoteId, ping: "ping", from_id: localId, from_name: "A", to_name: "B", type: handshakeRTC});
+    }
     else if(pong && from_id == remoteId) {
       //socket.emit(handshakeRTC, {to_id: 496, from_id: 269, })
-      createPC(localId, true); // người gọi sẽ có isOffer là true, người nhận sẽ tạo gói tin answer, isOffer là false
+      createPC(remoteId, true); // người gọi sẽ có isOffer là true, người nhận sẽ tạo gói tin answer, isOffer là false
     }
 }
 
@@ -197,8 +200,8 @@ function createPC(socketId, isOffer) {
   };
   
   pc.onsignalingstatechange = event => {
-    console.log('onsignalingstatechange', event);
-    console.log('signalingState', pc.signalingState);
+    //console.log('onsignalingstatechange', event);
+    console.log('===================signalingState', pc.signalingState);
     negotiating = (pc.signalingState != "stable");
   };
   
@@ -245,14 +248,14 @@ function playVideo(video) {
 }
 
 async function exchange(data) {
-  let pc;
+  // let pc;
   let fromId = data.from_id;
-  
-  if (fromId in pcPeers) {
-    pc = pcPeers[fromId];
-  } else {
-    pc = createPC(fromId, false);
-  }
+  let pc = pcPeers[fromId] || (await createPC(fromId, false));
+  // if (remoteId in pcPeers) {
+  //   pc = pcPeers[remoteId];
+  // } else {
+  //   pc = createPC(remoteId, false);
+  // }
   
   if (data.sdp) {
     const remoteOffer = new RTCSessionDescription(data.sdp); // tạo session của remote sau đó thêm vào localsession  dòng 260
@@ -269,16 +272,16 @@ async function exchange(data) {
         await pc.setLocalDescription(description);
         
         console.log('createAnswer:\n', description);
-        socket.emit(handshakeRTC, { to_id: remoteId, from_id: localId, sdp: pc.localDescription, from_name: "A", to_name: "B", type: handshakeRTC });
+        socket.emit(handshakeRTC, { to_id: fromId, from_id: localId, sdp: pc.localDescription, from_name: "A", to_name: "B", type: handshakeRTC });
       }
     } catch (e) {console.log(e);}
     
   } else {
     console.log('exchange candidate', data);
-    
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch (e) {logError(e);}
+    pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    // try {
+    //   await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    // } catch (e) {logError(e);}
   }
 }
 
